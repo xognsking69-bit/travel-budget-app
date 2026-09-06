@@ -331,3 +331,109 @@ $('saveImageBtn').onclick=async()=>{
 const _renderAllV22 = renderAll;
 renderAll = function(){ _renderAllV22(); applyAppearance(); };
 applyAppearance();
+
+
+// ===== v2.3 수동 백업 저장 / 불러오기 =====
+function safeFileName(text){
+  return String(text || '여행')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 50);
+}
+
+function buildBackupPayload(){
+  return {
+    app: 'travel-budget-planner',
+    backupVersion: 1,
+    appVersion: '2.3',
+    exportedAt: new Date().toISOString(),
+    state
+  };
+}
+
+function normalizeImportedState(raw){
+  const payload = raw && raw.state ? raw.state : raw;
+  if(!payload || typeof payload !== 'object') throw new Error('invalid-backup');
+
+  const base = defaultState();
+  const importedSettings = payload.settings && typeof payload.settings === 'object' ? payload.settings : {};
+  const settings = {...base.settings, ...importedSettings};
+
+  if(!(Number(settings.krwPerUnit) > 0) && Number(importedSettings.foreignPer1000) > 0){
+    settings.krwPerUnit = 1000 / Number(importedSettings.foreignPer1000);
+  }
+
+  const normalized = {
+    ...base,
+    ...payload,
+    settings,
+    expenses: Array.isArray(payload.expenses) ? payload.expenses : [],
+    checklist: Array.isArray(payload.checklist) && payload.checklist.length ? payload.checklist : base.checklist,
+    selectedDate: typeof payload.selectedDate === 'string' ? payload.selectedDate : settings.startDate,
+  };
+
+  normalized.appearance = {
+    ...appearanceDefaults,
+    ...(payload.appearance && typeof payload.appearance === 'object' ? payload.appearance : {})
+  };
+
+  if(!normalized.settings.startDate || !normalized.settings.endDate) throw new Error('invalid-dates');
+  return normalized;
+}
+
+async function saveBackupFile(){
+  const payload = buildBackupPayload();
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], {type:'application/json;charset=utf-8'});
+  const fileName = `여행경비_백업_${safeFileName(state.settings.tripName)}_${todayISO()}.json`;
+  const file = new File([blob], fileName, {type:'application/json'});
+
+  if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+    try{
+      await navigator.share({
+        title:'여행경비 백업 저장',
+        text:'이 파일을 안전한 위치에 저장해 두세요.',
+        files:[file]
+      });
+      return;
+    }catch(e){
+      if(e?.name === 'AbortError') return;
+    }
+  }
+  downloadBlob(blob, fileName);
+  toast('백업 파일을 저장했습니다.');
+}
+
+async function loadBackupFile(file){
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    const restored = normalizeImportedState(raw);
+
+    const tripName = restored.settings?.tripName || '여행';
+    if(!confirm(`“${tripName}” 백업을 불러올까요?\n현재 앱의 데이터는 이 백업 내용으로 교체됩니다.`)) return;
+
+    state = restored;
+    viewDate = new Date((state.selectedDate || state.settings.startDate) + 'T12:00:00');
+    saveState();
+    clearExpenseForm();
+    renderAll();
+    fillSettings();
+    applyAppearance();
+    activateTab('calendar');
+    toast('백업을 정상적으로 불러왔습니다.');
+  }catch(e){
+    console.error(e);
+    alert('백업 파일을 읽지 못했습니다.\n이 앱에서 만든 .json 백업 파일인지 확인해 주세요.');
+  }
+}
+
+$('backupSaveBtn').onclick = saveBackupFile;
+$('backupLoadBtn').onclick = () => $('backupFileInput').click();
+$('backupFileInput').onchange = async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  await loadBackupFile(file);
+};
+
