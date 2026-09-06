@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#17324d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>여행경비 플래너</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
@@ -14,15 +16,16 @@
       <div class="eyebrow">TRAVEL BUDGET</div>
       <h1>여행경비 플래너</h1>
     </div>
-    <button id="resetBtn" class="ghost danger">초기화</button>
+    <div class="header-actions"><button id="customizeBtn" class="ghost header-btn">🎨 꾸미기</button><button id="shareBtn" class="ghost header-btn">📤 공유</button><button id="resetBtn" class="ghost danger">초기화</button></div>
   </header>
 
   <main class="container">
-    <section class="card hero-card">
+    <section class="card hero-card" id="heroCard"><div id="heroPhoto" class="hero-photo"></div><div id="stickerLayer" class="sticker-layer" aria-hidden="true"></div>
       <div class="hero-top">
         <div>
           <p class="muted">여행</p>
           <h2 id="tripTitle">나의 여행</h2>
+          <p id="tripDestination" class="subtle"></p>
         </div>
         <div class="pill" id="tripDays">0일</div>
       </div>
@@ -31,6 +34,8 @@
         <div><span>총 지출</span><strong id="spentStat">0원</strong></div>
         <div><span>남은 예산</span><strong id="remainStat">0원</strong></div>
       </div>
+      <div class="budget-bar"><span id="budgetBar"></span></div>
+      <p id="budgetUsage" class="hint compact"></p>
     </section>
 
     <nav class="tabs" aria-label="앱 메뉴">
@@ -63,6 +68,7 @@
         </div>
 
         <form id="expenseForm" class="form-grid">
+          <input id="editingId" type="hidden" />
           <label>구분
             <select id="category">
               <option>식비</option><option>카페</option><option>교통</option><option>쇼핑</option>
@@ -89,8 +95,12 @@
           <label>메모
             <input id="memo" placeholder="선택사항" />
           </label>
-          <button class="primary full" type="submit">지출 저장</button>
+          <div class="form-actions full">
+            <button id="cancelEditBtn" class="ghost hidden" type="button">수정 취소</button>
+            <button id="expenseSubmitBtn" class="primary" type="submit">지출 저장</button>
+          </div>
         </form>
+        <p class="hint">저장하면 입력 내용은 지출기록으로 이동하고, 달력에는 해당 날짜의 총 지출만 표시됩니다.</p>
       </div>
     </section>
 
@@ -99,6 +109,18 @@
         <div class="section-title-row">
           <div><p class="muted">자동 저장됨</p><h3>지출 기록</h3></div>
           <button id="exportBtn" class="ghost">CSV 내보내기</button>
+        </div>
+        <div class="filter-row">
+          <select id="recordCategoryFilter" aria-label="카테고리 필터">
+            <option value="all">전체 구분</option>
+            <option>식비</option><option>카페</option><option>교통</option><option>쇼핑</option><option>관광</option>
+            <option>숙박</option><option>항공</option><option>통신</option><option>보험</option><option>기타</option>
+          </select>
+          <select id="recordSort" aria-label="정렬">
+            <option value="desc">최신순</option>
+            <option value="asc">오래된순</option>
+            <option value="amountDesc">금액 큰순</option>
+          </select>
         </div>
         <div id="recordsList" class="records-list"></div>
       </div>
@@ -110,6 +132,7 @@
           <div><p class="muted">여행 준비</p><h3>체크리스트</h3></div>
           <div class="pill" id="checkProgress">0%</div>
         </div>
+        <div class="progress-track"><span id="checkProgressBar"></span></div>
         <div id="checklistList" class="checklist-list"></div>
       </div>
     </section>
@@ -140,20 +163,56 @@
             <select id="currencyCode">
               <option value="JPY">JPY · 일본 엔</option><option value="USD">USD · 미국 달러</option>
               <option value="EUR">EUR · 유로</option><option value="CNY">CNY · 중국 위안</option>
-              <option value="TWD">TWD · 대만 달러</option><option value="THB">THB · 태국 바트</option>
-              <option value="VND">VND · 베트남 동</option><option value="GBP">GBP · 영국 파운드</option>
-              <option value="AUD">AUD · 호주 달러</option><option value="CAD">CAD · 캐나다 달러</option>
+              <option value="HKD">HKD · 홍콩 달러</option><option value="TWD">TWD · 대만 달러</option>
+              <option value="THB">THB · 태국 바트</option><option value="VND">VND · 베트남 동</option>
+              <option value="SGD">SGD · 싱가포르 달러</option><option value="MYR">MYR · 말레이시아 링깃</option>
+              <option value="PHP">PHP · 필리핀 페소</option><option value="IDR">IDR · 인도네시아 루피아</option>
+              <option value="INR">INR · 인도 루피</option><option value="GBP">GBP · 영국 파운드</option>
+              <option value="AUD">AUD · 호주 달러</option><option value="NZD">NZD · 뉴질랜드 달러</option>
+              <option value="CAD">CAD · 캐나다 달러</option><option value="CHF">CHF · 스위스 프랑</option>
+              <option value="AED">AED · UAE 디르함</option><option value="SAR">SAR · 사우디 리얄</option>
             </select>
           </label>
-          <label>1,000원 = 외화 몇 단위?
-            <input id="foreignPer1000" type="number" min="0.0001" step="0.001" value="107" />
+          <label><span id="rateLabel">1 JPY = 몇 원(KRW)?</span>
+            <input id="krwPerUnit" type="number" min="0.000001" step="0.000001" value="9.35" inputmode="decimal" />
           </label>
           <button class="primary full" type="submit">여행 설정 저장</button>
         </form>
-        <p class="hint">예: 1,000원이 약 107엔이면 107을 입력합니다. 외화 지출은 자동으로 원화 환산됩니다.</p>
+        <p class="hint" id="rateHint">구글·네이버·XE 등에서 “1 JPY KRW” 또는 “JPY KRW 환율”을 검색해 나온 원화 값을 그대로 입력하세요.</p>
       </div>
     </section>
   </main>
+
+
+    <section id="customizePanel" class="customize-drawer hidden" aria-label="꾸미기 설정">
+      <div class="drawer-head"><div><p class="muted">MY TRAVEL STYLE</p><h3>🎨 꾸미기</h3></div><button id="closeCustomizeBtn" class="icon-btn" type="button">×</button></div>
+      <div class="customize-grid">
+        <label class="full">테마
+          <select id="themeSelect">
+            <option value="passport">여권 네이비</option><option value="ocean">바다 여행</option><option value="sunset">노을 여행</option><option value="pastel">파스텔 다꾸</option><option value="night">야경 여행</option><option value="vintage">빈티지 엽서</option>
+          </select>
+        </label>
+        <label>포인트 색상<input id="accentColor" type="color" value="#3d8fb0"></label>
+        <label>글꼴 느낌<select id="fontSelect"><option value="system">깔끔 기본</option><option value="rounded">둥근 다꾸</option><option value="serif">여행 엽서</option></select></label>
+        <label class="full photo-picker">내 사진 배경
+          <input id="backgroundPhotoInput" type="file" accept="image/*" />
+          <span class="hint">사진 앱에서 선택하면 여행 카드 배경에 저장됩니다.</span>
+        </label>
+        <div class="full">
+          <div class="field-title">여행 스티커</div>
+          <div id="stickerChoices" class="sticker-choices"></div>
+          <p class="hint">최대 6개까지 선택할 수 있어요.</p>
+        </div>
+        <div class="form-actions full"><button id="removePhotoBtn" class="ghost" type="button">배경사진 지우기</button><button id="resetStyleBtn" class="ghost" type="button">꾸미기 초기화</button></div>
+      </div>
+    </section>
+
+    <section id="sharePanel" class="share-sheet hidden" aria-label="공유 및 저장">
+      <div class="drawer-head"><div><p class="muted">TRAVEL CARD</p><h3>📸 공유 이미지</h3></div><button id="closeShareBtn" class="icon-btn" type="button">×</button></div>
+      <canvas id="shareCanvas" width="1080" height="1350"></canvas>
+      <div class="share-actions"><button id="nativeShareBtn" class="primary" type="button">공유하기</button><button id="saveImageBtn" class="ghost" type="button">이미지 저장</button></div>
+      <p class="hint">아이폰에서 ‘이미지 저장’을 누르면 공유 시트 또는 파일 저장이 열릴 수 있습니다. 사진 앱 저장은 공유 시트의 ‘이미지 저장’을 선택하면 가장 안정적입니다.</p>
+    </section>
 
   <div id="toast" class="toast" role="status"></div>
   <script src="app.js"></script>

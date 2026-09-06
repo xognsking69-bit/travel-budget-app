@@ -1,10 +1,9 @@
 {
-  "name":"여행경비 플래너",
-  "short_name":"여행경비",
-  "start_url":"./",
-  "display":"standalone",
-  "background_color":"#f5f8fb",
-  "theme_color":"#17324d",
-  "lang":"ko-KR",
-  "icons":[]
+  "name": "여행경비 다꾸 플래너",
+  "short_name": "여행경비",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f8fb",
+  "theme_color": "#17324d",
+  "description": "달력에 지출을 기록하고 취향대로 꾸미는 모바일 여행경비 플래너"
 }
