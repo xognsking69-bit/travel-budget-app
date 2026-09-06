@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>여행경비 플래너</title>
-  <link rel="manifest" href="manifest.webmanifest?v=230" />
-  <link rel="stylesheet" href="styles.css?v=230" />
+  <link rel="manifest" href="manifest.webmanifest?v=240" />
+  <link rel="stylesheet" href="styles.css?v=240" />
 </head>
 <body>
   <header class="app-header">
@@ -180,20 +180,24 @@
         </form>
         <p class="hint" id="rateHint">구글·네이버·XE 등에서 “1 JPY KRW” 또는 “JPY KRW 환율”을 검색해 나온 원화 값을 그대로 입력하세요.</p>
 
+        
         <div class="backup-box">
           <div class="section-title-row">
             <div>
-              <p class="muted">혹시 모를 데이터 유실 대비</p>
-              <h3>💾 백업 저장 · 불러오기</h3>
+              <p class="muted">앱 안에 안전하게 보관</p>
+              <h3>💾 백업 보관함</h3>
             </div>
           </div>
-          <p class="hint">여행 설정, 지출 기록, 체크리스트, 꾸미기와 배경사진까지 하나의 백업 파일에 저장합니다.</p>
-          <div class="form-actions backup-actions">
-            <button id="backupSaveBtn" class="ghost" type="button">백업 저장</button>
-            <button id="backupLoadBtn" class="ghost" type="button">백업 불러오기</button>
-            <input id="backupFileInput" class="hidden" type="file" accept=".json,application/json" />
+          <p class="hint">현재 여행 데이터를 앱 안에 복사해 저장합니다. 저장된 백업을 눌러 언제든 이전 상태로 복원할 수 있어요.</p>
+
+          <div class="backup-create-row">
+            <input id="backupNameInput" type="text" placeholder="백업 이름 (예: 오사카 출발 전)" maxlength="40" />
+            <button id="backupCreateBtn" class="primary" type="button">현재 상태 백업</button>
           </div>
-          <p class="hint compact">아이폰에서는 ‘백업 저장’을 누른 뒤 공유 시트에서 ‘파일에 저장’을 선택하면 가장 안전합니다.</p>
+
+          <div id="backupList" class="backup-list"></div>
+
+          <p class="hint compact">※ 이 백업도 같은 브라우저 기기 안에 저장됩니다. 브라우저 데이터를 완전히 삭제하면 함께 사라질 수 있어요.</p>
         </div>
       </div>
     </section>
@@ -231,6 +235,6 @@
     </section>
 
   <div id="toast" class="toast" role="status"></div>
-  <script src="app.js?v=230"></script>
+  <script src="app.js?v=240"></script>
 </body>
 </html>
