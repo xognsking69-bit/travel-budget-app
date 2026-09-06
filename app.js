@@ -333,101 +333,88 @@ renderAll = function(){ _renderAllV22(); applyAppearance(); };
 applyAppearance();
 
 
-
-
-// ===== v2.4 앱 내부 백업 보관함 =====
-const BACKUP_KEY = 'travelBudgetPlannerBackupsV1';
-const BACKUP_LIMIT = 20;
-
-function cloneData(value){
-  return JSON.parse(JSON.stringify(value));
+// ===== v2.3 수동 백업 저장 / 불러오기 =====
+function safeFileName(text){
+  return String(text || '여행')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 50);
 }
 
-function loadBackups(){
-  try{
-    const raw = localStorage.getItem(BACKUP_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list : [];
-  }catch(e){
-    console.error('backup load error', e);
-    return [];
+function buildBackupPayload(){
+  return {
+    app: 'travel-budget-planner',
+    backupVersion: 1,
+    appVersion: '2.3',
+    exportedAt: new Date().toISOString(),
+    state
+  };
+}
+
+function normalizeImportedState(raw){
+  const payload = raw && raw.state ? raw.state : raw;
+  if(!payload || typeof payload !== 'object') throw new Error('invalid-backup');
+
+  const base = defaultState();
+  const importedSettings = payload.settings && typeof payload.settings === 'object' ? payload.settings : {};
+  const settings = {...base.settings, ...importedSettings};
+
+  if(!(Number(settings.krwPerUnit) > 0) && Number(importedSettings.foreignPer1000) > 0){
+    settings.krwPerUnit = 1000 / Number(importedSettings.foreignPer1000);
   }
-}
 
-function saveBackups(list){
-  localStorage.setItem(BACKUP_KEY, JSON.stringify(list.slice(0, BACKUP_LIMIT)));
-}
-
-function formatBackupTime(iso){
-  try{
-    return new Intl.DateTimeFormat('ko-KR', {
-      year:'numeric', month:'2-digit', day:'2-digit',
-      hour:'2-digit', minute:'2-digit'
-    }).format(new Date(iso));
-  }catch{
-    return iso || '';
-  }
-}
-
-function makeBackupName(){
-  const manual = ($('backupNameInput')?.value || '').trim();
-  if(manual) return manual;
-  const trip = state.settings?.tripName || '여행';
-  return `${trip} 백업`;
-}
-
-function createInAppBackup(){
-  const backups = loadBackups();
-  const snapshot = {
-    id: (crypto.randomUUID ? crypto.randomUUID() : `b_${Date.now()}_${Math.random().toString(36).slice(2)}`),
-    name: makeBackupName(),
-    createdAt: new Date().toISOString(),
-    tripName: state.settings?.tripName || '여행',
-    startDate: state.settings?.startDate || '',
-    endDate: state.settings?.endDate || '',
-    expenseCount: Array.isArray(state.expenses) ? state.expenses.length : 0,
-    totalSpent: Array.isArray(state.expenses) ? state.expenses.reduce((sum,e)=>sum+(Number(e.krwAmount)||0),0) : 0,
-    snapshot: cloneData(state)
+  const normalized = {
+    ...base,
+    ...payload,
+    settings,
+    expenses: Array.isArray(payload.expenses) ? payload.expenses : [],
+    checklist: Array.isArray(payload.checklist) && payload.checklist.length ? payload.checklist : base.checklist,
+    selectedDate: typeof payload.selectedDate === 'string' ? payload.selectedDate : settings.startDate,
   };
 
-  backups.unshift(snapshot);
+  normalized.appearance = {
+    ...appearanceDefaults,
+    ...(payload.appearance && typeof payload.appearance === 'object' ? payload.appearance : {})
+  };
 
-  try{
-    saveBackups(backups);
-  }catch(e){
-    console.error(e);
-    alert('백업을 저장할 공간이 부족합니다.\n배경사진 용량이 크다면 기존 백업을 일부 삭제해 주세요.');
-    return;
-  }
-
-  if($('backupNameInput')) $('backupNameInput').value = '';
-  renderBackupList();
-  toast('현재 상태를 백업 보관함에 저장했습니다.');
+  if(!normalized.settings.startDate || !normalized.settings.endDate) throw new Error('invalid-dates');
+  return normalized;
 }
 
-function restoreInAppBackup(id){
-  const backup = loadBackups().find(b => b.id === id);
-  if(!backup) return;
+async function saveBackupFile(){
+  const payload = buildBackupPayload();
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], {type:'application/json;charset=utf-8'});
+  const fileName = `여행경비_백업_${safeFileName(state.settings.tripName)}_${todayISO()}.json`;
+  const file = new File([blob], fileName, {type:'application/json'});
 
-  if(!confirm(`“${backup.name}” 상태로 되돌릴까요?\n현재 내용은 이 백업 시점의 내용으로 바뀝니다.`)) return;
+  if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+    try{
+      await navigator.share({
+        title:'여행경비 백업 저장',
+        text:'이 파일을 안전한 위치에 저장해 두세요.',
+        files:[file]
+      });
+      return;
+    }catch(e){
+      if(e?.name === 'AbortError') return;
+    }
+  }
+  downloadBlob(blob, fileName);
+  toast('백업 파일을 저장했습니다.');
+}
 
+async function loadBackupFile(file){
+  if(!file) return;
   try{
-    const restored = cloneData(backup.snapshot);
-    if(!restored || typeof restored !== 'object') throw new Error('invalid backup');
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    const restored = normalizeImportedState(raw);
+
+    const tripName = restored.settings?.tripName || '여행';
+    if(!confirm(`“${tripName}” 백업을 불러올까요?\n현재 앱의 데이터는 이 백업 내용으로 교체됩니다.`)) return;
 
     state = restored;
-    state.appearance = {
-      ...appearanceDefaults,
-      ...(state.appearance || {})
-    };
-    state.settings = {
-      ...defaultState().settings,
-      ...(state.settings || {})
-    };
-    state.expenses = Array.isArray(state.expenses) ? state.expenses : [];
-    state.checklist = Array.isArray(state.checklist) ? state.checklist : defaultState().checklist;
-    state.selectedDate = state.selectedDate || state.settings.startDate;
-
     viewDate = new Date((state.selectedDate || state.settings.startDate) + 'T12:00:00');
     saveState();
     clearExpenseForm();
@@ -435,69 +422,18 @@ function restoreInAppBackup(id){
     fillSettings();
     applyAppearance();
     activateTab('calendar');
-    renderBackupList();
-    toast('백업 상태로 복원했습니다.');
+    toast('백업을 정상적으로 불러왔습니다.');
   }catch(e){
     console.error(e);
-    alert('이 백업을 불러오지 못했습니다.');
+    alert('백업 파일을 읽지 못했습니다.\n이 앱에서 만든 .json 백업 파일인지 확인해 주세요.');
   }
 }
 
-function deleteInAppBackup(id){
-  const backups = loadBackups();
-  const target = backups.find(b=>b.id===id);
-  if(!target) return;
-  if(!confirm(`“${target.name}” 백업을 삭제할까요?`)) return;
-
-  saveBackups(backups.filter(b=>b.id!==id));
-  renderBackupList();
-  toast('백업을 삭제했습니다.');
-}
-
-function renderBackupList(){
-  const el = $('backupList');
-  if(!el) return;
-
-  const backups = loadBackups();
-  if(!backups.length){
-    el.innerHTML = `
-      <div class="backup-empty">
-        <div class="backup-empty-icon">🗂️</div>
-        <strong>아직 저장된 백업이 없어요.</strong>
-        <span>중요한 변경 전 ‘현재 상태 백업’을 눌러 보관해두세요.</span>
-      </div>`;
-    return;
-  }
-
-  el.innerHTML = backups.map(b => `
-    <article class="backup-card" data-backup-id="${b.id}">
-      <button class="backup-main" type="button" data-action="restore">
-        <div class="backup-icon">💾</div>
-        <div class="backup-info">
-          <strong>${escapeHTML(b.name || '여행 백업')}</strong>
-          <span>${formatBackupTime(b.createdAt)}</span>
-          <small>${escapeHTML(b.tripName || '여행')} · 지출 ${Number(b.expenseCount||0)}건</small>
-        </div>
-        <div class="backup-amount">${money(Number(b.totalSpent||0))}</div>
-      </button>
-      <button class="backup-delete" type="button" data-action="delete" aria-label="백업 삭제">삭제</button>
-    </article>
-  `).join('');
-
-  el.querySelectorAll('.backup-card').forEach(card => {
-    const id = card.dataset.backupId;
-    card.querySelector('[data-action="restore"]')?.addEventListener('click', () => restoreInAppBackup(id));
-    card.querySelector('[data-action="delete"]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteInAppBackup(id);
-    });
-  });
-}
-
-$('backupCreateBtn').onclick = createInAppBackup;
-$('backupNameInput').addEventListener('keydown', e => {
-  if(e.key === 'Enter') createInAppBackup();
-});
-
-renderBackupList();
+$('backupSaveBtn').onclick = saveBackupFile;
+$('backupLoadBtn').onclick = () => $('backupFileInput').click();
+$('backupFileInput').onchange = async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  await loadBackupFile(file);
+};
 
