@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#17324d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Trip꾸 여행경비 플래너</title>
+  <link rel="manifest" href="manifest.webmanifest?v=230" />
+  <link rel="stylesheet" href="planner.css?v=330" />
+
+<script>
+(async function(){
+  document.documentElement.style.visibility = "hidden";
+
+  const AUTH_SERVER = "https://tripggu-auth.xognsking69.workers.dev";
+  const code = localStorage.getItem("tripggu_license_code");
+  const deviceId = localStorage.getItem("tripggu_device_id");
+
+  if(!code || !deviceId){
+    location.replace("./index.html");
+    return;
+  }
+
+  try{
+    const r = await fetch(AUTH_SERVER + "/verify", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({code, deviceId})
+    });
+    const data = await r.json();
+
+    if(!data.ok){
+      localStorage.removeItem("tripggu_verified");
+      localStorage.removeItem("tripggu_license_code");
+      location.replace("./index.html");
+      return;
+    }
+
+    localStorage.setItem("tripggu_verified","1");
+    document.documentElement.style.visibility = "";
+  }catch(e){
+    document.documentElement.style.visibility = "";
+    document.body.innerHTML =
+      '<main style="max-width:560px;margin:60px auto;padding:24px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">' +
+      '<h2>Trip꾸 인증 서버에 연결할 수 없습니다.</h2>' +
+      '<p>인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>' +
+      '<button onclick="location.reload()" style="padding:12px 16px;border:0;border-radius:12px;background:#11a9a1;color:white;font-weight:700">다시 시도</button>' +
+      '</main>';
+  }
+})();
+</script>
+
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <div class="eyebrow">TRAVEL BUDGET</div>
+      <h1>Trip꾸 여행경비 플래너</h1>
+    </div>
+    <div class="header-actions"><button id="customizeBtn" class="ghost header-btn">🎨 꾸미기</button><button id="shareBtn" class="ghost header-btn">📤 공유</button><button id="resetBtn" class="ghost danger">초기화</button></div>
+  </header>
+
+  <main class="container">
+    <section class="card hero-card" id="heroCard"><div id="heroPhoto" class="hero-photo"></div><div id="stickerLayer" class="sticker-layer" aria-hidden="true"></div>
+      <div class="hero-top">
+        <div>
+          <p class="muted">여행</p>
+          <h2 id="tripTitle">나의 여행</h2>
+          <p id="tripDestination" class="subtle"></p>
+        </div>
+        <div class="pill" id="tripDays">0일</div>
+      </div>
+      <div class="stats">
+        <div><span>총 예산</span><strong id="budgetStat">0원</strong></div>
+        <div><span>총 지출</span><strong id="spentStat">0원</strong></div>
+        <div><span>남은 예산</span><strong id="remainStat">0원</strong></div>
+      </div>
+      <div class="budget-bar"><span id="budgetBar"></span></div>
+      <p id="budgetUsage" class="hint compact"></p>
+    </section>
+
+    <nav class="tabs" aria-label="앱 메뉴">
+      <button class="tab active" data-tab="calendar">달력</button>
+      <button class="tab" data-tab="itinerary">여행일정</button>
+      <button class="tab" data-tab="records">지출기록</button>
+      <button class="tab" data-tab="checklist">체크리스트</button>
+      <button class="tab" data-tab="settings">여행설정</button>
+    </nav>
+
+    <section id="calendar" class="tab-panel active">
+      <div class="card calendar-card">
+        <div class="calendar-head">
+          <button id="prevMonth" class="icon-btn" aria-label="이전 달">‹</button>
+          <h3 id="monthLabel"></h3>
+          <button id="nextMonth" class="icon-btn" aria-label="다음 달">›</button>
+        </div>
+        <div class="weekdays">
+          <div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div><div>일</div>
+        </div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title-row">
+          <div>
+            <p class="muted">선택 날짜</p>
+            <h3 id="selectedDateLabel">날짜를 선택하세요</h3>
+          </div>
+          <div class="daily-total" id="selectedDayTotal">0원</div>
+        </div>
+
+        <form id="expenseForm" class="form-grid">
+          <input id="editingId" type="hidden" />
+          <label>구분
+            <select id="category">
+              <option>식비</option><option>카페</option><option>교통</option><option>쇼핑</option>
+              <option>관광</option><option>숙박</option><option>항공</option><option>통신</option><option>보험</option><option>기타</option>
+            </select>
+          </label>
+          <label>내용
+            <input id="description" placeholder="예: 라멘" required />
+          </label>
+          <label>결제수단
+            <select id="payment">
+              <option>카드</option><option>현금</option><option>트래블카드</option><option>간편결제</option><option>기타</option>
+            </select>
+          </label>
+          <label>통화
+            <select id="currencyMode">
+              <option value="foreign">외화</option>
+              <option value="krw">원화</option>
+            </select>
+          </label>
+          <label>금액
+            <input id="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="예: 1500" required />
+          </label>
+          <label>메모
+            <input id="memo" placeholder="선택사항" />
+          </label>
+          <div class="form-actions full">
+            <button id="cancelEditBtn" class="ghost hidden" type="button">수정 취소</button>
+            <button id="expenseSubmitBtn" class="primary" type="submit">지출 저장</button>
+          </div>
+        </form>
+        <p class="hint">저장하면 입력 내용은 지출기록으로 이동하고, 달력에는 해당 날짜의 총 지출만 표시됩니다.</p>
+      </div>
+    </section>
+
+    <section id="itinerary" class="tab-panel">
+      <div class="card itinerary-card">
+        <div class="section-title-row">
+          <div>
+            <p class="muted">BOOKING STYLE CALENDAR</p>
+            <h3>✈️ 여행 일정 · 예약</h3>
+          </div>
+          <span class="itinerary-count" id="itineraryCount">0개</span>
+        </div>
+        <p class="hint">항공권·숙소 예약처럼 시작일부터 종료일까지 달력에 하나의 띠로 이어져 표시됩니다.</p>
+
+        <form id="scheduleForm" class="form-grid schedule-form">
+          <input id="scheduleEditingId" type="hidden" />
+          <label>종류
+            <select id="scheduleType">
+              <option value="flight">✈️ 항공</option>
+              <option value="hotel">🏨 숙소</option>
+              <option value="transport">🚆 교통</option>
+              <option value="activity">🎟 관광·예약</option>
+              <option value="food">🍽 식사</option>
+              <option value="shopping">🛍 쇼핑</option>
+              <option value="plan">📍 일반 일정</option>
+            </select>
+          </label>
+          <label>일정 이름
+            <input id="scheduleTitle" placeholder="예: 오사카 3박 4일 / 호텔 예약" required />
+          </label>
+          <label>시작일
+            <input id="scheduleStart" type="date" required />
+          </label>
+          <label>종료일
+            <input id="scheduleEnd" type="date" required />
+          </label>
+          <label>표시 색상
+            <select id="scheduleColor">
+              <option value="sky">하늘 블루</option>
+              <option value="mint">민트 그린</option>
+              <option value="peach">피치 코랄</option>
+              <option value="lavender">라벤더</option>
+              <option value="navy">여권 네이비</option>
+              <option value="yellow">선샤인 옐로</option>
+            </select>
+          </label>
+          <label>표시 느낌
+            <select id="scheduleStyle">
+              <option value="soft">파스텔 리본</option>
+              <option value="solid">예약 티켓</option>
+              <option value="outline">라인 다꾸</option>
+            </select>
+          </label>
+          <label class="full">메모
+            <input id="scheduleMemo" placeholder="예: KE721 · 간사이공항 / 체크인 15:00" />
+          </label>
+          <div class="form-actions full">
+            <button id="scheduleCancelEdit" class="ghost hidden" type="button">수정 취소</button>
+            <button id="scheduleSubmitBtn" class="primary" type="submit">일정 저장</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title-row">
+          <div><p class="muted">달력에 표시되는 예약</p><h3>일정 목록</h3></div>
+        </div>
+        <div id="scheduleList" class="schedule-list"></div>
+      </div>
+
+      <div class="card trip-band-card">
+        <div class="section-title-row">
+          <div><p class="muted">여행 전체 기간</p><h3>🎨 여행 기간 띠 꾸미기</h3></div>
+        </div>
+        <p class="hint">여행설정의 시작일~종료일을 달력에 자동으로 길게 연결해 보여줍니다.</p>
+        <div class="form-grid">
+          <label>자동 표시
+            <select id="tripBandVisible"><option value="yes">표시</option><option value="no">숨기기</option></select>
+          </label>
+          <label>색상
+            <select id="tripBandColor">
+              <option value="sky">하늘 블루</option><option value="mint">민트 그린</option><option value="peach">피치 코랄</option>
+              <option value="lavender">라벤더</option><option value="navy">여권 네이비</option><option value="yellow">선샤인 옐로</option>
+            </select>
+          </label>
+          <label>느낌
+            <select id="tripBandStyle"><option value="soft">파스텔 리본</option><option value="solid">예약 티켓</option><option value="outline">라인 다꾸</option></select>
+          </label>
+          <label>아이콘
+            <select id="tripBandIcon"><option value="✈️">✈️ 비행기</option><option value="🧳">🧳 캐리어</option><option value="🌴">🌴 여행</option><option value="💗">💗 하트</option><option value="📍">📍 핀</option></select>
+          </label>
+        </div>
+        <button id="saveTripBandBtn" class="primary full" type="button">달력 표시 저장</button>
+      </div>
+    </section>
+
+    <section id="records" class="tab-panel">
+      <div class="card">
+        <div class="section-title-row">
+          <div><p class="muted">자동 저장됨</p><h3>지출 기록</h3></div>
+          <button id="exportBtn" class="ghost">CSV 내보내기</button>
+        </div>
+        <div class="filter-row">
+          <select id="recordCategoryFilter" aria-label="카테고리 필터">
+            <option value="all">전체 구분</option>
+            <option>식비</option><option>카페</option><option>교통</option><option>쇼핑</option><option>관광</option>
+            <option>숙박</option><option>항공</option><option>통신</option><option>보험</option><option>기타</option>
+          </select>
+          <select id="recordSort" aria-label="정렬">
+            <option value="desc">최신순</option>
+            <option value="asc">오래된순</option>
+            <option value="amountDesc">금액 큰순</option>
+          </select>
+        </div>
+        <div id="recordsList" class="records-list"></div>
+      </div>
+    </section>
+
+    <section id="checklist" class="tab-panel">
+      <div class="card">
+        <div class="section-title-row">
+          <div><p class="muted">여행 준비</p><h3>체크리스트</h3></div>
+          <div class="pill" id="checkProgress">0%</div>
+        </div>
+        <div class="progress-track"><span id="checkProgressBar"></span></div>
+        <div id="checklistList" class="checklist-list"></div>
+      </div>
+    </section>
+
+    <section id="settings" class="tab-panel">
+      <div class="card">
+        <h3>여행 설정</h3>
+        <form id="settingsForm" class="form-grid">
+          <label>여행 이름
+            <input id="tripName" placeholder="예: 오사카 3박 4일" />
+          </label>
+          <label>여행지
+            <input id="destination" placeholder="예: 일본 오사카" />
+          </label>
+          <label>시작일
+            <input id="startDate" type="date" />
+          </label>
+          <label>종료일
+            <input id="endDate" type="date" />
+          </label>
+          <label>인원
+            <input id="people" type="number" min="1" value="2" />
+          </label>
+          <label>총 예산(원)
+            <input id="budget" type="number" min="0" step="1000" value="1000000" />
+          </label>
+          <label>외화 선택
+            <select id="currencyCode">
+              <option value="JPY">JPY · 일본 엔</option><option value="USD">USD · 미국 달러</option>
+              <option value="EUR">EUR · 유로</option><option value="CNY">CNY · 중국 위안</option>
+              <option value="HKD">HKD · 홍콩 달러</option><option value="TWD">TWD · 대만 달러</option>
+              <option value="THB">THB · 태국 바트</option><option value="VND">VND · 베트남 동</option>
+              <option value="SGD">SGD · 싱가포르 달러</option><option value="MYR">MYR · 말레이시아 링깃</option>
+              <option value="PHP">PHP · 필리핀 페소</option><option value="IDR">IDR · 인도네시아 루피아</option>
+              <option value="INR">INR · 인도 루피</option><option value="GBP">GBP · 영국 파운드</option>
+              <option value="AUD">AUD · 호주 달러</option><option value="NZD">NZD · 뉴질랜드 달러</option>
+              <option value="CAD">CAD · 캐나다 달러</option><option value="CHF">CHF · 스위스 프랑</option>
+              <option value="AED">AED · UAE 디르함</option><option value="SAR">SAR · 사우디 리얄</option>
+            </select>
+          </label>
+          <label><span id="rateLabel">1 JPY = 몇 원(KRW)?</span>
+            <input id="krwPerUnit" type="number" min="0.000001" step="0.000001" value="9.35" inputmode="decimal" />
+          </label>
+          <button class="primary full" type="submit">여행 설정 저장</button>
+        </form>
+        <p class="hint" id="rateHint">구글·네이버·XE 등에서 “1 JPY KRW” 또는 “JPY KRW 환율”을 검색해 나온 원화 값을 그대로 입력하세요.</p>
+
+        <div class="backup-box">
+          <div class="section-title-row">
+            <div>
+              <p class="muted">혹시 모를 데이터 유실 대비</p>
+              <h3>💾 백업 저장 · 불러오기</h3>
+            </div>
+          </div>
+          <p class="hint">여행 설정, 지출 기록, 체크리스트, 꾸미기와 배경사진까지 하나의 백업 파일에 저장합니다.</p>
+          <div class="form-actions backup-actions">
+            <button id="backupSaveBtn" class="ghost" type="button">백업 저장</button>
+            <button id="backupLoadBtn" class="ghost" type="button">백업 불러오기</button>
+            <input id="backupFileInput" class="hidden" type="file" accept=".json,application/json" />
+          </div>
+          <p class="hint compact">아이폰에서는 ‘백업 저장’을 누른 뒤 공유 시트에서 ‘파일에 저장’을 선택하면 가장 안전합니다.</p>
+        </div>
+
+        <div class="license-management-box">
+          <div class="section-title-row">
+            <div>
+              <p class="muted">구매자 인증</p>
+              <h3>🔐 이용권 관리</h3>
+            </div>
+          </div>
+          <p class="hint">현재 기기에 저장된 Trip꾸 구매 인증을 관리합니다.</p>
+          <button id="tripgguLogoutBtn" class="ghost danger full" type="button">
+            이 기기 인증 해제
+          </button>
+          <p class="hint compact">인증을 해제하면 다음 접속 시 구매 이용코드를 다시 입력해야 합니다.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+
+    <section id="customizePanel" class="customize-drawer hidden" aria-label="꾸미기 설정">
+      <div class="drawer-head"><div><p class="muted">MY TRAVEL STYLE</p><h3>🎨 꾸미기</h3></div><button id="closeCustomizeBtn" class="icon-btn" type="button">×</button></div>
+      <div class="customize-grid">
+        <label class="full">테마
+          <select id="themeSelect">
+            <option value="passport">여권 네이비</option><option value="ocean">바다 여행</option><option value="sunset">노을 여행</option><option value="pastel">파스텔 다꾸</option><option value="night">야경 여행</option><option value="vintage">빈티지 엽서</option>
+          </select>
+        </label>
+        <label>포인트 색상<input id="accentColor" type="color" value="#3d8fb0"></label>
+        <label>글꼴 느낌<select id="fontSelect"><option value="system">깔끔 기본</option><option value="rounded">둥근 다꾸</option><option value="serif">여행 엽서</option></select></label>
+        <label class="full photo-picker">내 사진 배경
+          <input id="backgroundPhotoInput" type="file" accept="image/*" />
+          <span class="hint">사진 앱에서 선택하면 여행 카드 배경에 저장됩니다.</span>
+        </label>
+        <div class="full">
+          <div class="field-title">여행 스티커</div>
+          <div id="stickerChoices" class="sticker-choices"></div>
+          <p class="hint">최대 6개까지 선택할 수 있어요.</p>
+        </div>
+        <div class="form-actions full"><button id="removePhotoBtn" class="ghost" type="button">배경사진 지우기</button><button id="resetStyleBtn" class="ghost" type="button">꾸미기 초기화</button></div>
+      </div>
+    </section>
+
+    <section id="sharePanel" class="share-sheet hidden" aria-label="공유 및 저장">
+      <div class="drawer-head"><div><p class="muted">TRAVEL CARD</p><h3>📸 공유 이미지</h3></div><button id="closeShareBtn" class="icon-btn" type="button">×</button></div>
+      <canvas id="shareCanvas" width="1080" height="1350"></canvas>
+      <div class="share-actions"><button id="nativeShareBtn" class="primary" type="button">공유하기</button><button id="saveImageBtn" class="ghost" type="button">이미지 저장</button></div>
+      <p class="hint">아이폰에서 ‘이미지 저장’을 누르면 공유 시트 또는 파일 저장이 열릴 수 있습니다. 사진 앱 저장은 공유 시트의 ‘이미지 저장’을 선택하면 가장 안정적입니다.</p>
+    </section>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="planner.js?v=330"></script>
+</body>
+</html>

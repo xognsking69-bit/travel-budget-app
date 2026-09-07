@@ -1,0 +1,21 @@
+Trip꾸 v3.2 - 서버 기기 인증 해제 수정
+
+이번 수정 내용
+1. '이 기기 인증 해제' 시 브라우저만 지우지 않고 Cloudflare D1 activations에서도 해당 기기를 삭제합니다.
+2. 서버 해제 성공 후에만 로컬 인증정보를 삭제합니다.
+3. 구매자 인증 화면의 '인증 서버 연결 전 미리보기' 문구를 제거했습니다.
+4. 테스트용 TRIP-TEST-2026에 남아 있는 이전 기기등록을 1회 초기화하는 SQL을 포함했습니다.
+
+GitHub -tripggu-app 저장소에서 교체/추가
+- index.html 교체
+- app.js 교체
+- planner.html 교체
+- planner.css 교체
+- planner.js 교체
+(기존 styles.css, terms.html, privacy.html, refund.html, license.html은 그대로 유지)
+
+Cloudflare Worker tripggu-auth
+- worker.js 내용으로 기존 Worker 코드를 전체 교체 후 Deploy
+- D1 바인딩 이름 DB는 그대로 유지
+
+중요: 이전 버전에서 인증 해제하면서 deviceId가 이미 지워졌으므로, 최초 테스트 전에 D1 Console에서 테스트코드_기기초기화.sql을 한 번 실행해야 합니다.
